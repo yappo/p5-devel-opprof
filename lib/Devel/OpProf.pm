@@ -46,7 +46,7 @@ sub profile {
         }
 
         if ($stash->{package} eq __PACKAGE__) {
-            if ($profile->{$stash->{before_op_seq}}->{package} ne __PACKAGE__) {
+            if ($stash->{before_op_seq} && $profile->{$stash->{before_op_seq}}->{package} ne __PACKAGE__) {
                 # save last step seq
                 $last_step_seq = $stash->{before_op_seq};
             }
@@ -71,20 +71,47 @@ sub profile {
     $running_profile;
 }
 
+sub _sourcecode_decoration {
+    my $profile = shift;
+
+    my %file_cache;
+    while (my($seq, $stash) = each %{ $profile }) {
+        my $file = $stash->{file};
+        my $file_data = $file_cache{$file} || do {
+            open my $fh, '<', $file or die $!;
+            my @lines = map { s/\n$//; $_ } <$fh>;
+            unshift @lines, undef;
+            \@lines;
+        };
+        $stash->{sourcecode} = $file_data->[$stash->{line}];
+    }
+    $profile;
+}
+
 sub show_profile {
-    my $profile = profile(@_);
+    my $profile = _sourcecode_decoration( profile(@_) );
     my $level = 0;
 
     my $total_steps = 0;
     my $total_usec  = 0;
+    my $file_line = '';
     for my $seq (sort { $a <=> $b } keys %{ $profile }) {
         my $stash = $profile->{$seq};
         $level-- if $stash->{name} =~ /leave/;
 
-        printf "%s%s(%s): %s(%s): %s steps, user time: %s/%s usec/avg\n",
-            ('    ' x $level ),
-            $stash->{class}, $seq,
-            $stash->{name}, $stash->{desc},
+        my $now_file_line = sprintf "%s, line of %s", 
+            $stash->{file}, $stash->{line};
+        unless ($file_line eq $now_file_line) {
+            $file_line = $now_file_line;
+            printf "%s\nin: %s\n", $file_line, $stash->{sourcecode};;
+        }
+        my $padding_space = ('    ' x $level );
+
+        printf "%s%- 20s%- 20s%s\n", $padding_space,
+            ($stash->{class} . "($seq)"),
+            $stash->{name}, $stash->{desc};
+
+        printf "%s    STEPS:% 10s, TIME: % 10s usec, AVRG: %s usec\n", $padding_space,
             $stash->{steps},
             $stash->{usec}, ($stash->{usec} / $stash->{steps});
 
