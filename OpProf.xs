@@ -76,11 +76,14 @@ opprof_runops(pTHX)
     int status;
     IV sec;
     struct rusage rusage1, rusage2;
+    OP *op;
+    COP *cop;
 
     while (1) {
 
         if (is_runnning) {
             /* profile mode */
+            op  = PL_op;
 
             /* getting first time */
             getrusage(RUSAGE_SELF, &rusage1);
@@ -95,7 +98,7 @@ opprof_runops(pTHX)
             if (status) {
                 break;
             }
-            opcode_capture(PL_op, sec);
+            opcode_capture(op, sec);
         } else {
             if (!(PL_op = CALL_FPTR(PL_op->op_ppaddr)(aTHX))) {
                 break;
