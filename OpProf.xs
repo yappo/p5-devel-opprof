@@ -20,7 +20,7 @@ HV *capture;
  * capture of running opes status
  */
 void
-opcode_capture(OP *op, IV sec) {
+opcode_capture(OP *op, COP *cop, IV sec) {
     HV *op_stash;
     char seq[64];
     I32 seq_len;
@@ -47,6 +47,12 @@ opcode_capture(OP *op, IV sec) {
         hv_store(op_stash, "type",  4, newSViv(op->op_type), 0); 
         hv_store(op_stash, "steps", 5, newSViv(0), 0);
         hv_store(op_stash, "usec",  4, newSViv(0), 0);
+
+        /* takes by COP */
+        hv_store(op_stash, "cop_seq", 7, newSViv(cop->cop_seq), 0); 
+        hv_store(op_stash, "package", 7, newSVpv(CopSTASHPV(cop), strlen(CopSTASHPV(cop))), 0); 
+        hv_store(op_stash, "file",    4, CopFILESV(cop), 0); 
+        hv_store(op_stash, "line",    4, newSVuv((UV) CopLINE(cop)), 0); 
 
         hv_store(capture, seq, seq_len, newRV_noinc((SV *) op_stash), 0);
     }
@@ -84,6 +90,7 @@ opprof_runops(pTHX)
         if (is_runnning) {
             /* profile mode */
             op  = PL_op;
+            cop = PL_curcop;
 
             /* getting first time */
             getrusage(RUSAGE_SELF, &rusage1);
@@ -98,7 +105,7 @@ opprof_runops(pTHX)
             if (status) {
                 break;
             }
-            opcode_capture(op, sec);
+            opcode_capture(op, cop, sec);
         } else {
             if (!(PL_op = CALL_FPTR(PL_op->op_ppaddr)(aTHX))) {
                 break;
