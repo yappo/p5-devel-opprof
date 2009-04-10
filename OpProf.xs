@@ -10,7 +10,7 @@
 
 static int (*runops_original)(pTHX);
 static int is_runnning = 0;
-static int skip_count  = 0; /* it skips first 4 times */
+static U16 before_op_seq = 0;
 
 #define USEC 1000000
 
@@ -24,11 +24,6 @@ opcode_capture(OP *op, COP *cop, IV sec) {
     HV *op_stash;
     char seq[64];
     I32 seq_len;
-
-    if (skip_count) {
-        skip_count--;
-        return;
-    }
 
     seq_len = sprintf(seq, "%d", op->op_seq);
 
@@ -69,7 +64,12 @@ opcode_capture(OP *op, COP *cop, IV sec) {
         }
         SvIV_set(*count, SvIV(*count) + 1);
         SvIV_set(*usec, SvIV(*usec) + sec);
+
+        /* set the before current op_seq */
+        hv_store(op_stash, "before_op_seq", 13, newSViv((IV) before_op_seq), 0);
     }
+
+    before_op_seq = op->op_seq;
 }
 
 /*
@@ -129,7 +129,6 @@ start(capture_hash)
         hv_clear(capture_hash);
         capture     = capture_hash;
         is_runnning = 1;
-        skip_count  = 4;
 
 void
 stop()

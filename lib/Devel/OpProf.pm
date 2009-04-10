@@ -18,7 +18,6 @@ sub profile {
     stop();
 
     # get op tree
-    my $max_seq = 0;
     local *B::OP::for_opprof = sub {
         my $self = shift;
         my $seq  = $self->seq;
@@ -29,8 +28,6 @@ sub profile {
         $stash->{class}    = ref($self);
         $stash->{name}     = $self->name;
         $stash->{desc}     = $self->desc;
-
-        $max_seq = $seq if $max_seq < $seq;
     };
     local *B::NULL::for_opprof = sub { warn 'NULL' };
 
@@ -39,17 +36,24 @@ sub profile {
     # grep real running opes
     my $running_profile = {};
     my $skip_prepare_op = 1;
+    my $last_step_seq;
     for my $seq (sort { $a <=> $b } keys %{ $profile }) {
         my $stash = $profile->{$seq};
 
-        # skips to prepare phase
-        if ($skip_prepare_op) {
-            if (ppname($stash->{type}) eq 'pp_entersub') {
-                $skip_prepare_op = 0;
-            }
+        if ($stash->{before_op_seq} && $profile->{$stash->{before_op_seq}}->{package} eq __PACKAGE__) {
+            # delete first steps
             next;
         }
-        last if $max_seq eq $seq;  # strip to leavesub on callback code
+
+        if ($stash->{package} eq __PACKAGE__) {
+            if ($profile->{$stash->{before_op_seq}}->{package} ne __PACKAGE__) {
+                # save last step seq
+                $last_step_seq = $stash->{before_op_seq};
+            }
+
+            # delete bootstrap steps
+            next;
+        }
 
         if (!$stash->{on_inner}) {
             # running external sub
@@ -61,6 +65,8 @@ sub profile {
 
         $running_profile->{$seq} = $profile->{$seq};
     }
+    delete $running_profile->{$last_step_seq}; # delete last step
+
 
     $running_profile;
 }
